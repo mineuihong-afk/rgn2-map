@@ -138,28 +138,47 @@
     #match-info .matched  { color: #00C4CC; font-weight: 700; }
     #match-info .unmatched { color: #FF6B6B; font-weight: 700; }
 
-    /* 구간 집계 카드 */
-    #range-summary {
-      position: absolute; top: 10px; right: 14px;
-      background: rgba(255,255,255,0.96); border-radius: 10px;
-      padding: 12px 14px; box-shadow: 0 2px 14px rgba(0,0,0,0.12);
-      min-width: 196px; font-size: 11px; display: none;
+    /* ── 우측 패널 ── */
+    .right-panel {
+      width: 214px; flex-shrink: 0; background: #fff;
+      border-left: 1px solid #E5E8EE;
+      display: flex; flex-direction: column; overflow-y: auto; gap: 0;
     }
-    #range-summary .rs-title {
+    .rp-section {
+      padding: 14px 14px 10px; border-bottom: 1px solid #F0F2F5;
+    }
+    .rp-section:last-child { border-bottom: none; flex: 1; }
+    .rp-title {
       font-size: 10px; font-weight: 700; color: #888;
-      text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 9px;
+      text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 10px;
     }
+
+    /* 구간 집계 */
+    #range-summary { display: none; }
     .rs-row {
-      display: flex; align-items: center; gap: 8px;
-      padding: 5px 0; border-bottom: 1px solid #F5F5F5;
+      display: flex; align-items: center; gap: 7px;
+      padding: 4px 0; border-bottom: 1px solid #F7F7F7;
     }
     .rs-row:last-child { border-bottom: none; }
-    .rs-dot {
-      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    .rs-dot  { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .rs-label { flex: 1; font-size: 10px; color: #555; }
+    .rs-count { font-size: 11px; font-weight: 700; color: #1A1A2E; min-width: 26px; text-align: right; }
+    .rs-pct   { font-size: 10px; color: #999; min-width: 34px; text-align: right; }
+
+    /* 광역시도 바 차트 */
+    #region-chart { display: none; }
+    .rc-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 0; border-bottom: 1px solid #F7F7F7;
     }
-    .rs-label { flex: 1; color: #555; white-space: nowrap; }
-    .rs-count { font-weight: 700; color: #1A1A2E; min-width: 28px; text-align: right; }
-    .rs-pct   { color: #999; min-width: 38px; text-align: right; }
+    .rc-row:last-child { border-bottom: none; }
+    .rc-name { font-size: 10px; color: #555; width: 26px; flex-shrink: 0; }
+    .rc-bar-wrap {
+      flex: 1; height: 6px; background: #F0F2F5; border-radius: 3px; overflow: hidden;
+    }
+    .rc-bar  { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+    .rc-pct  { font-size: 10px; font-weight: 700; color: #1A1A2E; min-width: 32px; text-align: right; }
+    .rc-cnt  { font-size: 9px; color: #bbb; min-width: 18px; text-align: right; }
 
     /* 줌 버튼 */
     .zoom-btns { position: absolute; right: 14px; bottom: 20px; display: flex; flex-direction: column; gap: 4px; }
@@ -227,7 +246,7 @@
     </div>
   </div>
 
-  <div class="map-area">
+  <div class="map-area" style="flex:1;min-width:0;">
     <div id="loading">
       <div class="spinner"></div>
       <span>지도 데이터 로딩 중...</span>
@@ -235,11 +254,21 @@
     <svg id="map"></svg>
     <div id="tooltip"></div>
     <div id="match-info" style="display:none"></div>
-    <div id="range-summary"></div>
     <div class="zoom-btns">
       <button onclick="zoomIn()">+</button>
       <button onclick="zoomReset()">⌂</button>
       <button onclick="zoomOut()">−</button>
+    </div>
+  </div>
+
+  <div class="right-panel">
+    <div class="rp-section" id="range-wrap">
+      <div class="rp-title">구간별 분포</div>
+      <div id="range-summary"></div>
+    </div>
+    <div class="rp-section" id="region-wrap">
+      <div class="rp-title">광역시도별 침투율</div>
+      <div id="region-chart"></div>
     </div>
   </div>
 </div>
@@ -251,7 +280,7 @@
 //    파트너: 12월 파트너수(T열) / 12월 파트너수 푸드(U열)
 // ═══════════════════════════════════════════════════════════════════════════
 const REAL_DATA = [
-  // [0] 주문 침투율 (기존)
+  // [0] Inventory(지역) 주문
   {
   "가평군": {total:50170,specific:0,ratio:0.000000},
   "강남구": {total:1393265,specific:0,ratio:0.000000},
@@ -482,7 +511,7 @@ const REAL_DATA = [
   "화천군": {total:24254,specific:0,ratio:0.000000},
   "횡성군": {total:34144,specific:0,ratio:0.000000}
 },
-  // [1] 파트너 침투율 (기존)
+  // [1] Inventory(지역) 파트너
   {
   "가평군": {total:438,specific:0,ratio:0.000000},
   "강남구": {total:5783,specific:0,ratio:0.000000},
@@ -713,7 +742,7 @@ const REAL_DATA = [
   "화천군": {total:136,specific:0,ratio:0.000000},
   "횡성군": {total:183,specific:0,ratio:0.000000}
 },
-  // [2] 주문 침투율(합산)
+  // [2] Inventory(전국+지역) 주문
   {
   "가평군": {total:50170,specific:33660,ratio:0.670919},
   "강남구": {total:1393265,specific:202421,ratio:0.145285},
@@ -944,7 +973,7 @@ const REAL_DATA = [
   "화천군": {total:24254,specific:14751,ratio:0.608188},
   "횡성군": {total:34144,specific:20954,ratio:0.613695}
 },
-  // [3] 파트너 침투율(합산)
+  // [3] Inventory(전국+지역) 파트너
   {
   "가평군": {total:438,specific:360,ratio:0.821918},
   "강남구": {total:5783,specific:1068,ratio:0.184679},
@@ -1176,6 +1205,86 @@ const REAL_DATA = [
   "횡성군": {total:183,specific:145,ratio:0.792350}
 },
 ];
+
+// ── 광역시도 롤업 데이터 ──────────────────────────────────────────────────────
+const ROLLUP_DATA = [
+  {
+  "서울": {total:17666498,specific:0,count:25,ratio:0.000000},
+  "경기": {total:19983744,specific:445130,count:42,ratio:0.022275},
+  "인천": {total:5186114,specific:0,count:10,ratio:0.000000},
+  "강원": {total:2397485,specific:81204,count:18,ratio:0.033870},
+  "충북": {total:2966323,specific:668850,count:14,ratio:0.225481},
+  "충남": {total:3608680,specific:732311,count:16,ratio:0.202930},
+  "세종": {total:615440,specific:0,count:1,ratio:0.000000},
+  "전북": {total:2550442,specific:121040,count:15,ratio:0.047458},
+  "전남": {total:2214394,specific:609708,count:22,ratio:0.275339},
+  "경북": {total:4065503,specific:1389871,count:24,ratio:0.341869},
+  "경남": {total:5371516,specific:2365793,count:22,ratio:0.440433},
+  "대구": {total:4608690,specific:230208,count:8,ratio:0.049951},
+  "부산": {total:6218386,specific:327997,count:16,ratio:0.052746},
+  "울산": {total:2006708,specific:515999,count:5,ratio:0.257137},
+  "대전": {total:3195248,specific:0,count:5,ratio:0.000000},
+  "광주": {total:2730703,specific:0,count:5,ratio:0.000000},
+  "제주": {total:1190463,specific:562762,count:2,ratio:0.472725}
+},
+  {
+  "서울": {total:60416,specific:0,count:25,ratio:0.000000},
+  "경기": {total:76527,specific:243,count:42,ratio:0.003175},
+  "인천": {total:17131,specific:0,count:10,ratio:0.000000},
+  "강원": {total:10055,specific:100,count:18,ratio:0.009945},
+  "충북": {total:10452,specific:550,count:14,ratio:0.052622},
+  "충남": {total:12620,specific:658,count:16,ratio:0.052139},
+  "세종": {total:2383,specific:0,count:1,ratio:0.000000},
+  "전북": {total:9766,specific:110,count:15,ratio:0.011264},
+  "전남": {total:8885,specific:520,count:22,ratio:0.058526},
+  "경북": {total:15052,specific:1291,count:24,ratio:0.085769},
+  "경남": {total:20110,specific:1960,count:22,ratio:0.097464},
+  "대구": {total:15192,specific:216,count:8,ratio:0.014218},
+  "부산": {total:21081,specific:299,count:16,ratio:0.014183},
+  "울산": {total:7136,specific:400,count:5,ratio:0.056054},
+  "대전": {total:9432,specific:0,count:5,ratio:0.000000},
+  "광주": {total:8832,specific:0,count:5,ratio:0.000000},
+  "제주": {total:6199,specific:426,count:2,ratio:0.068721}
+},
+  {
+  "서울": {total:17666498,specific:3200312,count:25,ratio:0.181151},
+  "경기": {total:19983744,specific:4563539,count:42,ratio:0.228363},
+  "인천": {total:5186114,specific:1025331,count:10,ratio:0.197707},
+  "강원": {total:2397485,specific:786554,count:18,ratio:0.328075},
+  "충북": {total:2966323,specific:1419376,count:14,ratio:0.478497},
+  "충남": {total:3608680,specific:1642596,count:16,ratio:0.455179},
+  "세종": {total:615440,specific:155610,count:1,ratio:0.252843},
+  "전북": {total:2557488,specific:763327,count:15,ratio:0.298467},
+  "전남": {total:2214394,specific:1188874,count:22,ratio:0.536885},
+  "경북": {total:4065503,specific:2354461,count:24,ratio:0.579132},
+  "경남": {total:5371516,specific:3776107,count:22,ratio:0.702987},
+  "대구": {total:4608690,specific:1086013,count:8,ratio:0.235645},
+  "부산": {total:6218386,specific:1755359,count:16,ratio:0.282285},
+  "울산": {total:2006708,specific:905908,count:5,ratio:0.451440},
+  "대전": {total:3195248,specific:610968,count:5,ratio:0.191211},
+  "광주": {total:2730703,specific:491934,count:5,ratio:0.180149},
+  "제주": {total:1190463,specific:930321,count:2,ratio:0.781478}
+},
+  {
+  "서울": {total:60416,specific:13326,count:25,ratio:0.220571},
+  "경기": {total:76527,specific:17255,count:42,ratio:0.225476},
+  "인천": {total:17131,specific:3069,count:10,ratio:0.179149},
+  "강원": {total:10055,specific:4401,count:18,ratio:0.437693},
+  "충북": {total:10452,specific:4292,count:14,ratio:0.410639},
+  "충남": {total:12620,specific:5012,count:16,ratio:0.397147},
+  "세종": {total:2383,specific:579,count:1,ratio:0.242971},
+  "전북": {total:9766,specific:3504,count:15,ratio:0.358796},
+  "전남": {total:8885,specific:3890,count:22,ratio:0.437817},
+  "경북": {total:15052,specific:6474,count:24,ratio:0.430109},
+  "경남": {total:20110,specific:8658,count:22,ratio:0.430532},
+  "대구": {total:15192,specific:2443,count:8,ratio:0.160808},
+  "부산": {total:21081,specific:8880,count:16,ratio:0.421232},
+  "울산": {total:7136,specific:1401,count:5,ratio:0.196328},
+  "대전": {total:9432,specific:1401,count:5,ratio:0.148537},
+  "광주": {total:8832,specific:1109,count:5,ratio:0.125566},
+  "제주": {total:6199,specific:3438,count:2,ratio:0.554606}
+},
+];
 // ═══════════════════════════════════════════════════════════════════════════
 // 1. 지역 목록 (전국 250개 시/군/구)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1284,7 +1393,7 @@ function refreshDummy() {
   }
   updateMapColors();
   renderStats();
-  renderRangeSummary();
+  renderRightPanel();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1305,7 +1414,7 @@ function setTab(idx) {
   document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
   updateMapColors();
   renderStats();
-  renderRangeSummary();
+  renderRightPanel();
 }
 
 function setSort(dir) {
@@ -1333,7 +1442,7 @@ function setMode(mode) {
   document.getElementById('mode-diverging').classList.toggle('active', mode === 'diverging');
   drawLegend();
   updateMapColors();
-  renderRangeSummary();
+  renderRightPanel();
 }
 
 function drawLegend() {
@@ -1460,14 +1569,14 @@ function renderStats() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 9. 구간 집계
+// 9. 구간 집계 + 광역시도 바 차트
 // ═══════════════════════════════════════════════════════════════════════════
 const RANGE_BUCKETS = [
-  { label: '~ 20% 미만',        min: 0,    max: 0.2  },
-  { label: '20% 이상 40% 미만', min: 0.2,  max: 0.4  },
-  { label: '40% 이상 60% 미만', min: 0.4,  max: 0.6  },
-  { label: '60% 이상 80% 미만', min: 0.6,  max: 0.8  },
-  { label: '80% 이상',          min: 0.8,  max: Infinity },
+  { label: '20% 미만',          min: 0,   max: 0.2 },
+  { label: '20%~40% 미만',      min: 0.2, max: 0.4 },
+  { label: '40%~60% 미만',      min: 0.4, max: 0.6 },
+  { label: '60%~80% 미만',      min: 0.6, max: 0.8 },
+  { label: '80% 이상',          min: 0.8, max: Infinity },
 ];
 
 function renderRangeSummary() {
@@ -1476,24 +1585,48 @@ function renderRangeSummary() {
   if (!entries.length) { el.style.display = 'none'; return; }
 
   const total = entries.length;
-  const counts = RANGE_BUCKETS.map(b =>
-    entries.filter(d => d.ratio >= b.min && d.ratio < b.max).length
-  );
-  // 구간 중간값으로 색상 결정
   const midpoints = [0.10, 0.30, 0.50, 0.70, 0.90];
+  el.style.display = 'block';
+  el.innerHTML = RANGE_BUCKETS.map((b, i) => {
+    const cnt = entries.filter(d => d.ratio >= b.min && d.ratio < b.max).length;
+    const pct = (cnt / total * 100).toFixed(1);
+    return `<div class="rs-row">
+      <div class="rs-dot" style="background:${getColor(midpoints[i])}"></div>
+      <div class="rs-label">${b.label}</div>
+      <div class="rs-count">${cnt}개</div>
+      <div class="rs-pct">${pct}%</div>
+    </div>`;
+  }).join('');
+}
+
+function renderRegionChart() {
+  const el = document.getElementById('region-chart');
+  const rollup = ROLLUP_DATA[activeTab];
+  if (!rollup || !Object.keys(rollup).length) { el.style.display = 'none'; return; }
+
+  const entries = Object.entries(rollup)
+    .map(([rgn1, d]) => ({ rgn1, ...d }))
+    .sort((a, b) => b.ratio - a.ratio);
+
+  const maxRatio = Math.max(...entries.map(e => e.ratio), 0.001);
 
   el.style.display = 'block';
-  el.innerHTML = `<div class="rs-title">구간별 분포</div>` +
-    RANGE_BUCKETS.map((b, i) => {
-      const pct = total > 0 ? (counts[i] / total * 100).toFixed(1) : '0.0';
-      const dot = getColor(midpoints[i]);
-      return `<div class="rs-row">
-        <div class="rs-dot" style="background:${dot}"></div>
-        <div class="rs-label">${b.label}</div>
-        <div class="rs-count">${counts[i]}개</div>
-        <div class="rs-pct">${pct}%</div>
-      </div>`;
-    }).join('');
+  el.innerHTML = entries.map(e => {
+    const pct    = (e.ratio * 100).toFixed(1);
+    const barW   = (e.ratio / maxRatio * 100).toFixed(1);
+    const col    = getColor(e.ratio);
+    return `<div class="rc-row">
+      <div class="rc-name">${e.rgn1}</div>
+      <div class="rc-bar-wrap"><div class="rc-bar" style="width:${barW}%;background:${col}"></div></div>
+      <div class="rc-pct">${pct}%</div>
+      <div class="rc-cnt">${e.count}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderRightPanel() {
+  renderRangeSummary();
+  renderRegionChart();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
