@@ -138,6 +138,29 @@
     #match-info .matched  { color: #00C4CC; font-weight: 700; }
     #match-info .unmatched { color: #FF6B6B; font-weight: 700; }
 
+    /* 구간 집계 카드 */
+    #range-summary {
+      position: absolute; top: 10px; right: 14px;
+      background: rgba(255,255,255,0.96); border-radius: 10px;
+      padding: 12px 14px; box-shadow: 0 2px 14px rgba(0,0,0,0.12);
+      min-width: 196px; font-size: 11px; display: none;
+    }
+    #range-summary .rs-title {
+      font-size: 10px; font-weight: 700; color: #888;
+      text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 9px;
+    }
+    .rs-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 0; border-bottom: 1px solid #F5F5F5;
+    }
+    .rs-row:last-child { border-bottom: none; }
+    .rs-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+    }
+    .rs-label { flex: 1; color: #555; white-space: nowrap; }
+    .rs-count { font-weight: 700; color: #1A1A2E; min-width: 28px; text-align: right; }
+    .rs-pct   { color: #999; min-width: 38px; text-align: right; }
+
     /* 줌 버튼 */
     .zoom-btns { position: absolute; right: 14px; bottom: 20px; display: flex; flex-direction: column; gap: 4px; }
     .zoom-btns button {
@@ -212,6 +235,7 @@
     <svg id="map"></svg>
     <div id="tooltip"></div>
     <div id="match-info" style="display:none"></div>
+    <div id="range-summary"></div>
     <div class="zoom-btns">
       <button onclick="zoomIn()">+</button>
       <button onclick="zoomReset()">⌂</button>
@@ -1260,6 +1284,7 @@ function refreshDummy() {
   }
   updateMapColors();
   renderStats();
+  renderRangeSummary();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1280,6 +1305,7 @@ function setTab(idx) {
   document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
   updateMapColors();
   renderStats();
+  renderRangeSummary();
 }
 
 function setSort(dir) {
@@ -1307,6 +1333,7 @@ function setMode(mode) {
   document.getElementById('mode-diverging').classList.toggle('active', mode === 'diverging');
   drawLegend();
   updateMapColors();
+  renderRangeSummary();
 }
 
 function drawLegend() {
@@ -1433,7 +1460,44 @@ function renderStats() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 9. 툴팁
+// 9. 구간 집계
+// ═══════════════════════════════════════════════════════════════════════════
+const RANGE_BUCKETS = [
+  { label: '~ 20% 미만',        min: 0,    max: 0.2  },
+  { label: '20% 이상 40% 미만', min: 0.2,  max: 0.4  },
+  { label: '40% 이상 60% 미만', min: 0.4,  max: 0.6  },
+  { label: '60% 이상 80% 미만', min: 0.6,  max: 0.8  },
+  { label: '80% 이상',          min: 0.8,  max: Infinity },
+];
+
+function renderRangeSummary() {
+  const el = document.getElementById('range-summary');
+  const entries = Object.values(userDataMaps[activeTab]);
+  if (!entries.length) { el.style.display = 'none'; return; }
+
+  const total = entries.length;
+  const counts = RANGE_BUCKETS.map(b =>
+    entries.filter(d => d.ratio >= b.min && d.ratio < b.max).length
+  );
+  // 구간 중간값으로 색상 결정
+  const midpoints = [0.10, 0.30, 0.50, 0.70, 0.90];
+
+  el.style.display = 'block';
+  el.innerHTML = `<div class="rs-title">구간별 분포</div>` +
+    RANGE_BUCKETS.map((b, i) => {
+      const pct = total > 0 ? (counts[i] / total * 100).toFixed(1) : '0.0';
+      const dot = getColor(midpoints[i]);
+      return `<div class="rs-row">
+        <div class="rs-dot" style="background:${dot}"></div>
+        <div class="rs-label">${b.label}</div>
+        <div class="rs-count">${counts[i]}개</div>
+        <div class="rs-pct">${pct}%</div>
+      </div>`;
+    }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. 툴팁
 // ═══════════════════════════════════════════════════════════════════════════
 function onMouseMove(event, d) {
   const geoName = d.properties.name || d.properties.NAME || '';
