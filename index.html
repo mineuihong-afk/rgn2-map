@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Unique 침투율 (rgn2)</title>
+  <title>Unique order protection (rgn2)</title>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://unpkg.com/topojson@3/dist/topojson.min.js"></script>
   <style>
@@ -163,17 +163,17 @@
 
 <header>
   <div class="badge">MAP</div>
-  <h1>Unique 침투율 (rgn2)</h1>
+  <h1>Unique order protection (rgn2)</h1>
   <div class="sub">시/군/구 단위 · 대한민국</div>
 </header>
 
 <div class="main">
   <div class="panel">
     <div class="tab-nav">
-      <button class="tab-btn active" onclick="setTab(0)">주문 침투율</button>
-      <button class="tab-btn"        onclick="setTab(1)">파트너 침투율</button>
-      <button class="tab-btn"        onclick="setTab(2)">주문(합산)</button>
-      <button class="tab-btn"        onclick="setTab(3)">파트너(합산)</button>
+      <button class="tab-btn active" onclick="setTab(0)">Inventory(지역) 주문</button>
+      <button class="tab-btn"        onclick="setTab(1)">Inventory(지역) 파트너</button>
+      <button class="tab-btn"        onclick="setTab(2)">Inventory(전국+지역) 주문</button>
+      <button class="tab-btn"        onclick="setTab(3)">Inventory(전국+지역) 파트너</button>
     </div>
 
     <div class="panel-actions">
@@ -840,7 +840,7 @@ const REAL_DATA = [
   "옥천군": {total:45119,specific:26011,ratio:0.576498},
   "옹진군": {total:11744,specific:7412,ratio:0.631131},
   "완도군": {total:3527,specific:1464,ratio:0.415084},
-  "완주군": {total:115340,specific:122386,ratio:1.061089},
+  "완주군": {total:122386,specific:122386,ratio:1.000000},
   "용산구": {total:339027,specific:46757,ratio:0.137915},
   "용인시 기흥구": {total:483634,specific:94387,ratio:0.195162},
   "용인시 수지구": {total:345008,specific:71997,ratio:0.208682},
