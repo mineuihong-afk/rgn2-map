@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unique 침투율 (rgn2)</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script src="https://unpkg.com/topojson@3/dist/topojson.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+      background: #F7F8FA; color: #1A1A2E;
+      height: 100vh; display: flex; flex-direction: column;
+    }
+
+    /* ── 헤더 ── */
+    header {
+      background: #1A1A2E; color: #fff;
+      padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    }
+    header .badge {
+      background: #00C4CC; color: #fff; font-size: 11px; font-weight: 700;
+      padding: 3px 8px; border-radius: 4px; letter-spacing: 0.5px;
+    }
+    header h1 { font-size: 17px; font-weight: 700; }
+    header .sub { font-size: 12px; color: #aaa; margin-left: auto; }
+
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── 패널 ── */
+    .panel {
+      width: 300px; flex-shrink: 0; background: #fff;
+      border-right: 1px solid #E5E8EE; display: flex; flex-direction: column; overflow: hidden;
+    }
+
+    /* 탭 */
+    .tab-nav { display: flex; border-bottom: 2px solid #F0F2F5; flex-shrink: 0; }
+    .tab-btn {
+      flex: 1; padding: 12px 8px; border: none; background: transparent;
+      font-size: 12px; font-weight: 600; color: #999; cursor: pointer;
+      position: relative; transition: color 0.2s;
+    }
+    .tab-btn:hover { color: #333; }
+    .tab-btn.active { color: #1A1A2E; font-weight: 700; }
+    .tab-btn.active::after {
+      content: ''; position: absolute; bottom: -2px; left: 0; right: 0;
+      height: 2px; background: #00C4CC; border-radius: 2px 2px 0 0;
+    }
+
+    /* 더미 재생성 버튼 */
+    .panel-actions { padding: 10px 14px; border-bottom: 1px solid #F0F2F5; }
+    .btn-refresh {
+      width: 100%; padding: 9px; background: #F7F8FA; color: #555;
+      border: 1px solid #D8DCE6; border-radius: 8px; font-size: 12px;
+      font-weight: 600; cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px;
+    }
+    .btn-refresh:hover { background: #00C4CC; color: #fff; border-color: #00C4CC; }
+
+    /* 범례 */
+    .legend-wrap { padding: 12px 14px; border-bottom: 1px solid #F0F2F5; }
+    .legend-wrap h2 {
+      font-size: 11px; font-weight: 700; color: #555;
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px;
+    }
+    .legend-mode { display: flex; gap: 6px; margin-bottom: 8px; }
+    .legend-mode button {
+      flex: 1; padding: 4px; border: 1px solid #D8DCE6; border-radius: 5px;
+      font-size: 11px; cursor: pointer; background: #F7F8FA; color: #555; transition: all 0.15s;
+    }
+    .legend-mode button.active { background: #1A1A2E; color: #fff; border-color: #1A1A2E; }
+    canvas.legend-bar { width: 100%; height: 14px; border-radius: 7px; display: block; }
+    .legend-labels {
+      display: flex; justify-content: space-between; font-size: 10px; color: #999; margin-top: 3px;
+    }
+
+    /* 통계 목록 */
+    .stats-wrap { padding: 12px 14px; flex: 1; overflow-y: auto; }
+    .stats-wrap h2 {
+      font-size: 11px; font-weight: 700; color: #555;
+      text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 0;
+    }
+    .stats-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+    }
+    .sort-btns { display: flex; gap: 4px; }
+    .sort-btn {
+      font-size: 10px; padding: 3px 7px; border: 1px solid #D8DCE6;
+      border-radius: 4px; background: #F7F8FA; color: #999; cursor: pointer; transition: all 0.15s;
+      font-weight: 600; letter-spacing: 0.2px;
+    }
+    .sort-btn:hover { border-color: #00C4CC; color: #00C4CC; }
+    .sort-btn.active { background: #1A1A2E; color: #fff; border-color: #1A1A2E; }
+    .stat-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 0; border-bottom: 1px solid #F5F5F5; font-size: 11px;
+    }
+    .stat-row .rgn { color: #333; font-weight: 500; min-width: 70px; }
+    .stat-row .ratio { font-weight: 700; color: #00C4CC; min-width: 40px; text-align: right; }
+    .stat-row .bar-bg {
+      flex: 1; height: 4px; background: #F0F2F5; border-radius: 2px; margin: 0 8px; overflow: hidden;
+    }
+    .stat-row .bar-fill { height: 100%; border-radius: 2px; }
+    .no-data { font-size: 12px; color: #aaa; text-align: center; padding: 20px 0; }
+
+    /* ── 지도 ── */
+    .map-area { flex: 1; position: relative; overflow: hidden; background: #EEF2F7; }
+    svg#map { width: 100%; height: 100%; cursor: grab; }
+    svg#map:active { cursor: grabbing; }
+    .region { stroke: #fff; stroke-width: 0.4; transition: opacity 0.1s; cursor: pointer; }
+    .region:hover { opacity: 0.75; stroke-width: 1.0; stroke: #444; }
+    .region.no-match { fill: #D8DEE9; }
+
+    /* 툴팁 */
+    #tooltip {
+      position: absolute; background: rgba(26,26,46,0.95); color: #fff;
+      padding: 10px 14px; border-radius: 10px; font-size: 12px;
+      pointer-events: none; display: none; min-width: 155px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3); line-height: 1.8;
+    }
+    #tooltip .tt-name {
+      font-weight: 700; font-size: 13px;
+      border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 5px; margin-bottom: 5px;
+    }
+    #tooltip .tt-ratio { font-size: 22px; font-weight: 900; color: #00C4CC; line-height: 1.2; margin-bottom: 2px; }
+    #tooltip .tt-row { color: #ccc; }
+    #tooltip .tt-row span { color: #fff; font-weight: 600; }
+
+    /* 매칭 카운트 */
+    #match-info {
+      position: absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.92);
+      border-radius: 7px; padding: 5px 11px; font-size: 11px; color: #555;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+    }
+    #match-info .matched  { color: #00C4CC; font-weight: 700; }
+    #match-info .unmatched { color: #FF6B6B; font-weight: 700; }
+
+    /* 줌 버튼 */
+    .zoom-btns { position: absolute; right: 14px; bottom: 20px; display: flex; flex-direction: column; gap: 4px; }
+    .zoom-btns button {
+      width: 30px; height: 30px; border: none; border-radius: 7px; background: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; color: #333; transition: background 0.15s;
+    }
+    .zoom-btns button:hover { background: #00C4CC; color: #fff; }
+
+    /* 로딩 */
+    #loading {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: #EEF2F7; font-size: 13px; color: #888; flex-direction: column; gap: 12px;
+    }
+    .spinner {
+      width: 30px; height: 30px; border: 3px solid #D8DEE9;
+      border-top-color: #00C4CC; border-radius: 50%; animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="badge">MAP</div>
+  <h1>Unique 침투율 (rgn2)</h1>
+  <div class="sub">시/군/구 단위 · 대한민국</div>
+</header>
+
+<div class="main">
+  <div class="panel">
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="setTab(0)">주문 침투율</button>
+      <button class="tab-btn"        onclick="setTab(1)">파트너 침투율</button>
+    </div>
+
+    <div class="panel-actions">
+      <button class="btn-refresh" onclick="refreshDummy()">&#8635; 데이터 새로고침</button>
+    </div>
+
+    <div class="legend-wrap">
+      <h2>색상 범례</h2>
+      <div class="legend-mode">
+        <button id="mode-sequential" class="active" onclick="setMode('sequential')">순차형</button>
+        <button id="mode-diverging"               onclick="setMode('diverging')">분기형 (50%)</button>
+      </div>
+      <canvas class="legend-bar" id="legend-canvas" height="14"></canvas>
+      <div class="legend-labels">
+        <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
+      </div>
+    </div>
+
+    <div class="stats-wrap">
+      <div class="stats-header">
+        <h2>지역별 순위</h2>
+        <div class="sort-btns">
+          <button id="sort-desc" class="sort-btn active" onclick="setSort('desc')">▼ 내림차순</button>
+          <button id="sort-asc"  class="sort-btn"        onclick="setSort('asc')">▲ 오름차순</button>
+        </div>
+      </div>
+      <div id="stats-list"><div class="no-data">데이터 로딩 중...</div></div>
+    </div>
+  </div>
+
+  <div class="map-area">
+    <div id="loading">
+      <div class="spinner"></div>
+      <span>지도 데이터 로딩 중...</span>
+    </div>
+    <svg id="map"></svg>
+    <div id="tooltip"></div>
+    <div id="match-info" style="display:none"></div>
+    <div class="zoom-btns">
+      <button onclick="zoomIn()">+</button>
+      <button onclick="zoomReset()">⌂</button>
+      <button onclick="zoomOut()">−</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// 0. 실제 데이터 (Google Sheets → 12월 기준)
+//    주문: 12월 주문수(K열) / 12월 푸드 주문수(L열)
+//    파트너: 12월 파트너수(T열) / 12월 파트너수 푸드(U열)
+// ═══════════════════════════════════════════════════════════════════════════
+const REAL_DATA = [
+  {
+  "가평군": {total:50170,specific:0,ratio:0.000000},
+  "강남구": {total:1393265,specific:0,ratio:0.000000},
+  "강동구": {total:721872,specific:0,ratio:0.000000},
+  "강릉시": {total:394360,specific:0,ratio:0.000000},
+  "강북구": {total:502930,specific:0,ratio:0.000000},
+  "강서구": {total:289842,specific:123955,ratio:0.427664},
+  "강서구": {total:1018672,specific:0,ratio:0.000000},
+  "강진군": {total:8046,specific:0,ratio:0.000000},
+  "강화군": {total:39644,specific:0,ratio:0.000000},
+  "거제시": {total:441203,specific:205996,ratio:0.466896},
+  "거창군": {total:72939,specific:0,ratio:0.000000},
+  "경산시": {total:726532,specific:0,ratio:0.000000},
+  "경주시": {total:369288,specific:168035,ratio:0.455024},
+  "계룡시": {total:71583,specific:0,ratio:0.000000},
+  "계양구": {total:418944,specific:0,ratio:0.000000},
+  "고령군": {total:5109,specific:0,ratio:0.000000},
+  "고성군": {total:20716,specific:0,ratio:0.000000},
+  "고성군": {total:27233,specific:0,ratio:0.000000},
+  "고양시 덕양구": {total:609959,specific:0,ratio:0.000000},
+  "고양시 일산동구": {total:443308,specific:0,ratio:0.000000},
+  "고양시 일산서구": {total:326761,specific:0,ratio:0.000000},
+  "고창군": {total:11228,specific:0,ratio:0.000000},
+  "고흥군": {total:10086,specific:0,ratio:0.000000},
+  "곡성군": {total:3121,specific:0,ratio:0.000000},
+  "공주시": {total:135002,specific:65437,ratio:0.484711},
+  "과천시": {total:61568,specific:0,ratio:0.000000},
+  "관악구": {total:1238215,specific:0,ratio:0.000000},
+  "광명시": {total:345926,specific:0,ratio:0.000000},
+  "광산구": {total:759462,specific:0,ratio:0.000000},
+  "광양시": {total:288409,specific:145583,ratio:0.504780},
+  "광주시": {total:486334,specific:0,ratio:0.000000},
+  "광진구": {total:805924,specific:0,ratio:0.000000},
+  "괴산군": {total:12993,specific:0,ratio:0.000000},
+  "구례군": {total:2899,specific:0,ratio:0.000000},
+  "구로구": {total:573257,specific:0,ratio:0.000000},
+  "구리시": {total:300530,specific:0,ratio:0.000000},
+  "구미시": {total:965162,specific:429924,ratio:0.445442},
+  "군산시": {total:414242,specific:0,ratio:0.000000},
+  "군위군": {total:4135,specific:0,ratio:0.000000},
+  "군포시": {total:305539,specific:0,ratio:0.000000},
+  "금산군": {total:22008,specific:0,ratio:0.000000},
+  "금정구": {total:428550,specific:0,ratio:0.000000},
+  "금천구": {total:466391,specific:0,ratio:0.000000},
+  "기장군": {total:350992,specific:163329,ratio:0.465335},
+  "김제시": {total:63069,specific:0,ratio:0.000000},
+  "김천시": {total:170562,specific:86854,ratio:0.509222},
+  "김포시": {total:735168,specific:0,ratio:0.000000},
+  "김해시": {total:1040145,specific:493947,ratio:0.474883},
+  "나주시": {total:185917,specific:90232,ratio:0.485335},
+  "남구": {total:522250,specific:0,ratio:0.000000},
+  "남구": {total:309495,specific:0,ratio:0.000000},
+  "남구": {total:315078,specific:0,ratio:0.000000},
+  "남구": {total:706397,specific:0,ratio:0.000000},
+  "남동구": {total:837446,specific:0,ratio:0.000000},
+  "남양주시": {total:955107,specific:0,ratio:0.000000},
+  "남원시": {total:75513,specific:0,ratio:0.000000},
+  "남해군": {total:23248,specific:0,ratio:0.000000},
+  "노원구": {total:757389,specific:0,ratio:0.000000},
+  "논산시": {total:135428,specific:64724,ratio:0.477922},
+  "단양군": {total:11340,specific:0,ratio:0.000000},
+  "달서구": {total:1050704,specific:0,ratio:0.000000},
+  "달성군": {total:481650,specific:197232,ratio:0.409492},
+  "담양군": {total:21127,specific:0,ratio:0.000000},
+  "당진시": {total:351669,specific:175365,ratio:0.498665},
+  "대덕구": {total:306939,specific:0,ratio:0.000000},
+  "도봉구": {total:437201,specific:0,ratio:0.000000},
+  "동구": {total:310654,specific:149444,ratio:0.481063},
+  "동구": {total:146443,specific:0,ratio:0.000000},
+  "동구": {total:561285,specific:0,ratio:0.000000},
+  "동구": {total:70231,specific:0,ratio:0.000000},
+  "동구": {total:262419,specific:0,ratio:0.000000},
+  "동구": {total:506939,specific:0,ratio:0.000000},
+  "동대문구": {total:820115,specific:0,ratio:0.000000},
+  "동두천시": {total:141332,specific:66990,ratio:0.473990},
+  "동래구": {total:445023,specific:0,ratio:0.000000},
+  "동작구": {total:655790,specific:0,ratio:0.000000},
+  "동해시": {total:145276,specific:69678,ratio:0.479625},
+  "마포구": {total:854397,specific:0,ratio:0.000000},
+  "목포시": {total:441744,specific:218906,ratio:0.495549},
+  "무안군": {total:166204,specific:94126,ratio:0.566328},
+  "무주군": {total:2398,specific:0,ratio:0.000000},
+  "문경시": {total:60621,specific:0,ratio:0.000000},
+  "미추홀구": {total:824575,specific:0,ratio:0.000000},
+  "밀양시": {total:93232,specific:45188,ratio:0.484683},
+  "보령시": {total:131594,specific:71584,ratio:0.543976},
+  "보성군": {total:5549,specific:0,ratio:0.000000},
+  "보은군": {total:18736,specific:0,ratio:0.000000},
+  "봉화군": {total:4377,specific:0,ratio:0.000000},
+  "부산진구": {total:879500,specific:0,ratio:0.000000},
+  "부안군": {total:24993,specific:0,ratio:0.000000},
+  "부여군": {total:31203,specific:0,ratio:0.000000},
+  "부천시": {total:1204512,specific:0,ratio:0.000000},
+  "부평구": {total:838554,specific:0,ratio:0.000000},
+  "북구": {total:377981,specific:173101,ratio:0.457962},
+  "북구": {total:426738,specific:0,ratio:0.000000},
+  "북구": {total:871238,specific:0,ratio:0.000000},
+  "북구": {total:790651,specific:0,ratio:0.000000},
+  "사상구": {total:395132,specific:0,ratio:0.000000},
+  "사천시": {total:162779,specific:82399,ratio:0.506202},
+  "사하구": {total:529741,specific:0,ratio:0.000000},
+  "산청군": {total:7573,specific:0,ratio:0.000000},
+  "삼척시": {total:93466,specific:0,ratio:0.000000},
+  "상주시": {total:72089,specific:35424,ratio:0.491393},
+  "서구": {total:167722,specific:0,ratio:0.000000},
+  "서구": {total:259096,specific:0,ratio:0.000000},
+  "서구": {total:1085303,specific:0,ratio:0.000000},
+  "서구": {total:603093,specific:0,ratio:0.000000},
+  "서구": {total:1134525,specific:0,ratio:0.000000},
+  "서귀포시": {total:279330,specific:119255,ratio:0.426932},
+  "서대문구": {total:611831,specific:0,ratio:0.000000},
+  "서산시": {total:328799,specific:162693,ratio:0.494810},
+  "서천군": {total:20058,specific:0,ratio:0.000000},
+  "서초구": {total:720255,specific:0,ratio:0.000000},
+  "성남시 분당구": {total:555883,specific:0,ratio:0.000000},
+  "성남시 수정구": {total:349040,specific:0,ratio:0.000000},
+  "성남시 중원구": {total:302814,specific:0,ratio:0.000000},
+  "성동구": {total:548520,specific:0,ratio:0.000000},
+  "성북구": {total:815630,specific:0,ratio:0.000000},
+  "성주군": {total:17196,specific:0,ratio:0.000000},
+  "세종특별자치시": {total:615440,specific:0,ratio:0.000000},
+  "속초시": {total:186726,specific:0,ratio:0.000000},
+  "송파구": {total:1041914,specific:0,ratio:0.000000},
+  "수성구": {total:749870,specific:0,ratio:0.000000},
+  "수영구": {total:370157,specific:0,ratio:0.000000},
+  "수원시 권선구": {total:601392,specific:0,ratio:0.000000},
+  "수원시 영통구": {total:593954,specific:0,ratio:0.000000},
+  "수원시 장안구": {total:419095,specific:0,ratio:0.000000},
+  "수원시 팔달구": {total:451117,specific:0,ratio:0.000000},
+  "순창군": {total:2902,specific:0,ratio:0.000000},
+  "순천시": {total:485841,specific:0,ratio:0.000000},
+  "시흥시": {total:961560,specific:0,ratio:0.000000},
+  "신안군": {total:9,specific:0,ratio:0.000000},
+  "아산시": {total:663687,specific:0,ratio:0.000000},
+  "안동시": {total:244184,specific:118958,ratio:0.487165},
+  "안산시 단원구": {total:596972,specific:0,ratio:0.000000},
+  "안산시 상록구": {total:594454,specific:0,ratio:0.000000},
+  "안성시": {total:352571,specific:155967,ratio:0.442370},
+  "안양시 동안구": {total:403252,specific:0,ratio:0.000000},
+  "안양시 만안구": {total:315025,specific:0,ratio:0.000000},
+  "양구군": {total:14744,specific:0,ratio:0.000000},
+  "양산시": {total:697358,specific:321887,ratio:0.461581},
+  "양양군": {total:27482,specific:0,ratio:0.000000},
+  "양주시": {total:405970,specific:0,ratio:0.000000},
+  "양천구": {total:535708,specific:0,ratio:0.000000},
+  "양평군": {total:19410,specific:0,ratio:0.000000},
+  "여수시": {total:410499,specific:0,ratio:0.000000},
+  "여주시": {total:93565,specific:0,ratio:0.000000},
+  "연수구": {total:666522,specific:0,ratio:0.000000},
+  "연제구": {total:383656,specific:0,ratio:0.000000},
+  "연천군": {total:11569,specific:0,ratio:0.000000},
+  "영광군": {total:15597,specific:0,ratio:0.000000},
+  "영덕군": {total:4606,specific:0,ratio:0.000000},
+  "영도구": {total:139967,specific:0,ratio:0.000000},
+  "영동군": {total:28338,specific:0,ratio:0.000000},
+  "영등포구": {total:793192,specific:0,ratio:0.000000},
+  "영암군": {total:39664,specific:0,ratio:0.000000},
+  "영양군": {total:2404,specific:0,ratio:0.000000},
+  "영월군": {total:30718,specific:0,ratio:0.000000},
+  "영주시": {total:127830,specific:60484,ratio:0.473160},
+  "영천시": {total:94021,specific:43801,ratio:0.465864},
+  "예산군": {total:77252,specific:31372,ratio:0.406100},
+  "예천군": {total:52592,specific:0,ratio:0.000000},
+  "오산시": {total:399557,specific:0,ratio:0.000000},
+  "옥천군": {total:45119,specific:0,ratio:0.000000},
+  "옹진군": {total:11744,specific:0,ratio:0.000000},
+  "완도군": {total:3527,specific:0,ratio:0.000000},
+  "완주군": {total:115340,specific:60196,ratio:0.521900},
+  "용산구": {total:339027,specific:0,ratio:0.000000},
+  "용인시 기흥구": {total:483634,specific:0,ratio:0.000000},
+  "용인시 수지구": {total:345008,specific:0,ratio:0.000000},
+  "용인시 처인구": {total:471129,specific:0,ratio:0.000000},
+  "울릉군": {total:102,specific:0,ratio:0.000000},
+  "울주군": {total:315912,specific:144270,ratio:0.456678},
+  "울진군": {total:41014,specific:0,ratio:0.000000},
+  "원주시": {total:741493,specific:0,ratio:0.000000},
+  "유성구": {total:840613,specific:0,ratio:0.000000},
+  "은평구": {total:673234,specific:0,ratio:0.000000},
+  "음성군": {total:153381,specific:75744,ratio:0.493829},
+  "의령군": {total:8262,specific:0,ratio:0.000000},
+  "의성군": {total:3326,specific:0,ratio:0.000000},
+  "의왕시": {total:155248,specific:0,ratio:0.000000},
+  "의정부시": {total:814499,specific:0,ratio:0.000000},
+  "이천시": {total:383843,specific:184704,ratio:0.481197},
+  "익산시": {total:475373,specific:0,ratio:0.000000},
+  "인제군": {total:14889,specific:0,ratio:0.000000},
+  "임실군": {total:5682,specific:0,ratio:0.000000},
+  "장성군": {total:14384,specific:0,ratio:0.000000},
+  "장수군": {total:1200,specific:0,ratio:0.000000},
+  "장흥군": {total:5484,specific:0,ratio:0.000000},
+  "전주시 덕진구": {total:621943,specific:0,ratio:0.000000},
+  "전주시 완산구": {total:633683,specific:0,ratio:0.000000},
+  "정선군": {total:13508,specific:0,ratio:0.000000},
+  "정읍시": {total:100254,specific:55402,ratio:0.552616},
+  "제주시": {total:911133,specific:398106,ratio:0.436935},
+  "제천시": {total:215700,specific:101152,ratio:0.468948},
+  "종로구": {total:362839,specific:0,ratio:0.000000},
+  "중구": {total:353329,specific:0,ratio:0.000000},
+  "중구": {total:99536,specific:0,ratio:0.000000},
+  "중구": {total:325352,specific:0,ratio:0.000000},
+  "중구": {total:393151,specific:0,ratio:0.000000},
+  "중구": {total:406232,specific:0,ratio:0.000000},
+  "중구": {total:295764,specific:0,ratio:0.000000},
+  "중랑구": {total:625601,specific:0,ratio:0.000000},
+  "증평군": {total:83763,specific:0,ratio:0.000000},
+  "진도군": {total:1845,specific:0,ratio:0.000000},
+  "진안군": {total:2622,specific:0,ratio:0.000000},
+  "진주시": {total:689661,specific:0,ratio:0.000000},
+  "진천군": {total:160153,specific:59923,ratio:0.374161},
+  "창녕군": {total:38965,specific:0,ratio:0.000000},
+  "창원시 마산합포구": {total:290448,specific:140903,ratio:0.485123},
+  "창원시 마산회원구": {total:292563,specific:147546,ratio:0.504322},
+  "창원시 성산구": {total:490460,specific:241038,ratio:0.491453},
+  "창원시 의창구": {total:386455,specific:173519,ratio:0.449002},
+  "창원시 진해구": {total:373283,specific:181972,ratio:0.487491},
+  "천안시 동남구": {total:483373,specific:0,ratio:0.000000},
+  "천안시 서북구": {total:916173,specific:0,ratio:0.000000},
+  "철원군": {total:37712,specific:0,ratio:0.000000},
+  "청도군": {total:13825,specific:0,ratio:0.000000},
+  "청송군": {total:3732,specific:0,ratio:0.000000},
+  "청양군": {total:12461,specific:0,ratio:0.000000},
+  "청주시 상당구": {total:309969,specific:0,ratio:0.000000},
+  "청주시 서원구": {total:384329,specific:0,ratio:0.000000},
+  "청주시 청원구": {total:434371,specific:175207,ratio:0.403358},
+  "청주시 흥덕구": {total:695115,specific:0,ratio:0.000000},
+  "춘천시": {total:520348,specific:0,ratio:0.000000},
+  "충주시": {total:413016,specific:181504,ratio:0.439460},
+  "칠곡군": {total:183673,specific:72270,ratio:0.393471},
+  "태백시": {total:21830,specific:0,ratio:0.000000},
+  "태안군": {total:53239,specific:0,ratio:0.000000},
+  "통영시": {total:156648,specific:80190,ratio:0.511912},
+  "파주시": {total:726290,specific:0,ratio:0.000000},
+  "평창군": {total:16249,specific:0,ratio:0.000000},
+  "평택시": {total:1355700,specific:0,ratio:0.000000},
+  "포천시": {total:36690,specific:0,ratio:0.000000},
+  "포항시 남구": {total:437785,specific:192979,ratio:0.440808},
+  "포항시 북구": {total:461338,specific:0,ratio:0.000000},
+  "하남시": {total:438516,specific:0,ratio:0.000000},
+  "하동군": {total:5976,specific:0,ratio:0.000000},
+  "함안군": {total:47627,specific:0,ratio:0.000000},
+  "함양군": {total:24581,specific:0,ratio:0.000000},
+  "함평군": {total:4618,specific:0,ratio:0.000000},
+  "합천군": {total:877,specific:0,ratio:0.000000},
+  "해남군": {total:45634,specific:0,ratio:0.000000},
+  "해운대구": {total:643137,specific:0,ratio:0.000000},
+  "홍성군": {total:175151,specific:89753,ratio:0.512432},
+  "홍천군": {total:59570,specific:0,ratio:0.000000},
+  "화성시": {total:1379773,specific:0,ratio:0.000000},
+  "화순군": {total:54190,specific:0,ratio:0.000000},
+  "화천군": {total:24254,specific:0,ratio:0.000000},
+  "횡성군": {total:34144,specific:0,ratio:0.000000}
+},
+  {
+  "가평군": {total:438,specific:0,ratio:0.000000},
+  "강남구": {total:5783,specific:0,ratio:0.000000},
+  "강동구": {total:2405,specific:0,ratio:0.000000},
+  "강릉시": {total:1659,specific:0,ratio:0.000000},
+  "강북구": {total:1643,specific:0,ratio:0.000000},
+  "강서구": {total:1072,specific:120,ratio:0.111940},
+  "강서구": {total:3399,specific:0,ratio:0.000000},
+  "강진군": {total:103,specific:0,ratio:0.000000},
+  "강화군": {total:224,specific:0,ratio:0.000000},
+  "거제시": {total:1700,specific:258,ratio:0.151765},
+  "거창군": {total:282,specific:0,ratio:0.000000},
+  "경산시": {total:2009,specific:0,ratio:0.000000},
+  "경주시": {total:1562,specific:206,ratio:0.131882},
+  "계룡시": {total:259,specific:0,ratio:0.000000},
+  "계양구": {total:1373,specific:0,ratio:0.000000},
+  "고령군": {total:46,specific:0,ratio:0.000000},
+  "고성군": {total:157,specific:0,ratio:0.000000},
+  "고성군": {total:148,specific:0,ratio:0.000000},
+  "고양시 덕양구": {total:2412,specific:0,ratio:0.000000},
+  "고양시 일산동구": {total:1902,specific:0,ratio:0.000000},
+  "고양시 일산서구": {total:1255,specific:0,ratio:0.000000},
+  "고창군": {total:124,specific:0,ratio:0.000000},
+  "고흥군": {total:100,specific:0,ratio:0.000000},
+  "곡성군": {total:32,specific:0,ratio:0.000000},
+  "공주시": {total:484,specific:71,ratio:0.146694},
+  "과천시": {total:338,specific:0,ratio:0.000000},
+  "관악구": {total:2913,specific:0,ratio:0.000000},
+  "광명시": {total:1198,specific:0,ratio:0.000000},
+  "광산구": {total:2554,specific:0,ratio:0.000000},
+  "광양시": {total:949,specific:139,ratio:0.146470},
+  "광주시": {total:1876,specific:0,ratio:0.000000},
+  "광진구": {total:2349,specific:0,ratio:0.000000},
+  "괴산군": {total:92,specific:0,ratio:0.000000},
+  "구례군": {total:87,specific:0,ratio:0.000000},
+  "구로구": {total:1996,specific:0,ratio:0.000000},
+  "구리시": {total:1127,specific:0,ratio:0.000000},
+  "구미시": {total:3114,specific:412,ratio:0.132306},
+  "군산시": {total:1590,specific:0,ratio:0.000000},
+  "군위군": {total:37,specific:0,ratio:0.000000},
+  "군포시": {total:1276,specific:0,ratio:0.000000},
+  "금산군": {total:201,specific:0,ratio:0.000000},
+  "금정구": {total:1389,specific:0,ratio:0.000000},
+  "금천구": {total:1568,specific:0,ratio:0.000000},
+  "기장군": {total:1228,specific:179,ratio:0.145765},
+  "김제시": {total:323,specific:0,ratio:0.000000},
+  "김천시": {total:681,specific:101,ratio:0.148311},
+  "김포시": {total:2791,specific:0,ratio:0.000000},
+  "김해시": {total:3588,specific:390,ratio:0.108696},
+  "나주시": {total:757,specific:90,ratio:0.118890},
+  "남구": {total:1543,specific:0,ratio:0.000000},
+  "남구": {total:992,specific:0,ratio:0.000000},
+  "남구": {total:1097,specific:0,ratio:0.000000},
+  "남구": {total:2434,specific:0,ratio:0.000000},
+  "남동구": {total:2779,specific:0,ratio:0.000000},
+  "남양주시": {total:3608,specific:0,ratio:0.000000},
+  "남원시": {total:348,specific:0,ratio:0.000000},
+  "남해군": {total:173,specific:0,ratio:0.000000},
+  "노원구": {total:2175,specific:0,ratio:0.000000},
+  "논산시": {total:505,specific:74,ratio:0.146535},
+  "단양군": {total:104,specific:0,ratio:0.000000},
+  "달서구": {total:3307,specific:0,ratio:0.000000},
+  "달성군": {total:1504,specific:216,ratio:0.143617},
+  "담양군": {total:157,specific:0,ratio:0.000000},
+  "당진시": {total:1119,specific:162,ratio:0.144772},
+  "대덕구": {total:956,specific:0,ratio:0.000000},
+  "도봉구": {total:1265,specific:0,ratio:0.000000},
+  "동구": {total:1000,specific:112,ratio:0.112000},
+  "동구": {total:582,specific:0,ratio:0.000000},
+  "동구": {total:1917,specific:0,ratio:0.000000},
+  "동구": {total:211,specific:0,ratio:0.000000},
+  "동구": {total:872,specific:0,ratio:0.000000},
+  "동구": {total:1298,specific:0,ratio:0.000000},
+  "동대문구": {total:2184,specific:0,ratio:0.000000},
+  "동두천시": {total:575,specific:51,ratio:0.088696},
+  "동래구": {total:1655,specific:0,ratio:0.000000},
+  "동작구": {total:1772,specific:0,ratio:0.000000},
+  "동해시": {total:566,specific:100,ratio:0.176678},
+  "마포구": {total:3708,specific:0,ratio:0.000000},
+  "목포시": {total:1391,specific:198,ratio:0.142344},
+  "무안군": {total:603,specific:93,ratio:0.154229},
+  "무주군": {total:63,specific:0,ratio:0.000000},
+  "문경시": {total:335,specific:0,ratio:0.000000},
+  "미추홀구": {total:2423,specific:0,ratio:0.000000},
+  "밀양시": {total:432,specific:66,ratio:0.152778},
+  "보령시": {total:522,specific:78,ratio:0.149425},
+  "보성군": {total:71,specific:0,ratio:0.000000},
+  "보은군": {total:95,specific:0,ratio:0.000000},
+  "봉화군": {total:42,specific:0,ratio:0.000000},
+  "부산진구": {total:2681,specific:0,ratio:0.000000},
+  "부안군": {total:196,specific:0,ratio:0.000000},
+  "부여군": {total:180,specific:0,ratio:0.000000},
+  "부천시": {total:4427,specific:0,ratio:0.000000},
+  "부평구": {total:2635,specific:0,ratio:0.000000},
+  "북구": {total:1353,specific:139,ratio:0.102735},
+  "북구": {total:1335,specific:0,ratio:0.000000},
+  "북구": {total:2747,specific:0,ratio:0.000000},
+  "북구": {total:2443,specific:0,ratio:0.000000},
+  "사상구": {total:1191,specific:0,ratio:0.000000},
+  "사천시": {total:679,specific:91,ratio:0.134021},
+  "사하구": {total:1672,specific:0,ratio:0.000000},
+  "산청군": {total:55,specific:0,ratio:0.000000},
+  "삼척시": {total:324,specific:0,ratio:0.000000},
+  "상주시": {total:341,specific:38,ratio:0.111437},
+  "서구": {total:570,specific:0,ratio:0.000000},
+  "서구": {total:872,specific:0,ratio:0.000000},
+  "서구": {total:3675,specific:0,ratio:0.000000},
+  "서구": {total:1866,specific:0,ratio:0.000000},
+  "서구": {total:3338,specific:0,ratio:0.000000},
+  "서귀포시": {total:1837,specific:126,ratio:0.068590},
+  "서대문구": {total:1865,specific:0,ratio:0.000000},
+  "서산시": {total:1046,specific:153,ratio:0.146272},
+  "서천군": {total:142,specific:0,ratio:0.000000},
+  "서초구": {total:2874,specific:0,ratio:0.000000},
+  "성남시 분당구": {total:2793,specific:0,ratio:0.000000},
+  "성남시 수정구": {total:1326,specific:0,ratio:0.000000},
+  "성남시 중원구": {total:1076,specific:0,ratio:0.000000},
+  "성동구": {total:1957,specific:0,ratio:0.000000},
+  "성북구": {total:2220,specific:0,ratio:0.000000},
+  "성주군": {total:127,specific:0,ratio:0.000000},
+  "세종특별자치시": {total:2383,specific:0,ratio:0.000000},
+  "속초시": {total:797,specific:0,ratio:0.000000},
+  "송파구": {total:3914,specific:0,ratio:0.000000},
+  "수성구": {total:2548,specific:0,ratio:0.000000},
+  "수영구": {total:1382,specific:0,ratio:0.000000},
+  "수원시 권선구": {total:1960,specific:0,ratio:0.000000},
+  "수원시 영통구": {total:2286,specific:0,ratio:0.000000},
+  "수원시 장안구": {total:1361,specific:0,ratio:0.000000},
+  "수원시 팔달구": {total:1737,specific:0,ratio:0.000000},
+  "순창군": {total:52,specific:0,ratio:0.000000},
+  "순천시": {total:1641,specific:0,ratio:0.000000},
+  "시흥시": {total:3406,specific:0,ratio:0.000000},
+  "신안군": {total:3,specific:0,ratio:0.000000},
+  "아산시": {total:2357,specific:0,ratio:0.000000},
+  "안동시": {total:904,specific:126,ratio:0.139381},
+  "안산시 단원구": {total:2319,specific:0,ratio:0.000000},
+  "안산시 상록구": {total:1646,specific:0,ratio:0.000000},
+  "안성시": {total:1204,specific:112,ratio:0.093023},
+  "안양시 동안구": {total:1722,specific:0,ratio:0.000000},
+  "안양시 만안구": {total:1258,specific:0,ratio:0.000000},
+  "양구군": {total:108,specific:0,ratio:0.000000},
+  "양산시": {total:2537,specific:311,ratio:0.122586},
+  "양양군": {total:206,specific:0,ratio:0.000000},
+  "양주시": {total:1567,specific:0,ratio:0.000000},
+  "양천구": {total:1812,specific:0,ratio:0.000000},
+  "양평군": {total:352,specific:0,ratio:0.000000},
+  "여수시": {total:1725,specific:0,ratio:0.000000},
+  "여주시": {total:551,specific:0,ratio:0.000000},
+  "연수구": {total:2363,specific:0,ratio:0.000000},
+  "연제구": {total:1405,specific:0,ratio:0.000000},
+  "연천군": {total:186,specific:0,ratio:0.000000},
+  "영광군": {total:177,specific:0,ratio:0.000000},
+  "영덕군": {total:92,specific:0,ratio:0.000000},
+  "영도구": {total:500,specific:0,ratio:0.000000},
+  "영동군": {total:162,specific:0,ratio:0.000000},
+  "영등포구": {total:2967,specific:0,ratio:0.000000},
+  "영암군": {total:227,specific:0,ratio:0.000000},
+  "영양군": {total:17,specific:0,ratio:0.000000},
+  "영월군": {total:130,specific:0,ratio:0.000000},
+  "영주시": {total:568,specific:75,ratio:0.132042},
+  "영천시": {total:385,specific:40,ratio:0.103896},
+  "예산군": {total:299,specific:33,ratio:0.110368},
+  "예천군": {total:252,specific:0,ratio:0.000000},
+  "오산시": {total:1509,specific:0,ratio:0.000000},
+  "옥천군": {total:199,specific:0,ratio:0.000000},
+  "옹진군": {total:88,specific:0,ratio:0.000000},
+  "완도군": {total:80,specific:0,ratio:0.000000},
+  "완주군": {total:560,specific:40,ratio:0.071429},
+  "용산구": {total:1761,specific:0,ratio:0.000000},
+  "용인시 기흥구": {total:1907,specific:0,ratio:0.000000},
+  "용인시 수지구": {total:1388,specific:0,ratio:0.000000},
+  "용인시 처인구": {total:1710,specific:0,ratio:0.000000},
+  "울릉군": {total:5,specific:0,ratio:0.000000},
+  "울주군": {total:1203,specific:149,ratio:0.123857},
+  "울진군": {total:227,specific:0,ratio:0.000000},
+  "원주시": {total:2669,specific:0,ratio:0.000000},
+  "유성구": {total:2573,specific:0,ratio:0.000000},
+  "은평구": {total:2119,specific:0,ratio:0.000000},
+  "음성군": {total:724,specific:76,ratio:0.104972},
+  "의령군": {total:82,specific:0,ratio:0.000000},
+  "의성군": {total:63,specific:0,ratio:0.000000},
+  "의왕시": {total:520,specific:0,ratio:0.000000},
+  "의정부시": {total:2683,specific:0,ratio:0.000000},
+  "이천시": {total:1374,specific:80,ratio:0.058224},
+  "익산시": {total:1424,specific:0,ratio:0.000000},
+  "인제군": {total:109,specific:0,ratio:0.000000},
+  "임실군": {total:62,specific:0,ratio:0.000000},
+  "장성군": {total:106,specific:0,ratio:0.000000},
+  "장수군": {total:22,specific:0,ratio:0.000000},
+  "장흥군": {total:87,specific:0,ratio:0.000000},
+  "전주시 덕진구": {total:2157,specific:0,ratio:0.000000},
+  "전주시 완산구": {total:2363,specific:0,ratio:0.000000},
+  "정선군": {total:128,specific:0,ratio:0.000000},
+  "정읍시": {total:456,specific:70,ratio:0.153509},
+  "제주시": {total:4362,specific:300,ratio:0.068776},
+  "제천시": {total:772,specific:125,ratio:0.161917},
+  "종로구": {total:1955,specific:0,ratio:0.000000},
+  "중구": {total:1945,specific:0,ratio:0.000000},
+  "중구": {total:592,specific:0,ratio:0.000000},
+  "중구": {total:1305,specific:0,ratio:0.000000},
+  "중구": {total:1360,specific:0,ratio:0.000000},
+  "중구": {total:1267,specific:0,ratio:0.000000},
+  "중구": {total:1146,specific:0,ratio:0.000000},
+  "중랑구": {total:1867,specific:0,ratio:0.000000},
+  "증평군": {total:289,specific:0,ratio:0.000000},
+  "진도군": {total:38,specific:0,ratio:0.000000},
+  "진안군": {total:26,specific:0,ratio:0.000000},
+  "진주시": {total:2333,specific:0,ratio:0.000000},
+  "진천군": {total:633,specific:72,ratio:0.113744},
+  "창녕군": {total:251,specific:0,ratio:0.000000},
+  "창원시 마산합포구": {total:1107,specific:118,ratio:0.106594},
+  "창원시 마산회원구": {total:1073,specific:125,ratio:0.116496},
+  "창원시 성산구": {total:1726,specific:180,ratio:0.104287},
+  "창원시 의창구": {total:1388,specific:148,ratio:0.106628},
+  "창원시 진해구": {total:1353,specific:158,ratio:0.116778},
+  "천안시 동남구": {total:1534,specific:0,ratio:0.000000},
+  "천안시 서북구": {total:3039,specific:0,ratio:0.000000},
+  "철원군": {total:261,specific:0,ratio:0.000000},
+  "청도군": {total:123,specific:0,ratio:0.000000},
+  "청송군": {total:36,specific:0,ratio:0.000000},
+  "청양군": {total:67,specific:0,ratio:0.000000},
+  "청주시 상당구": {total:1215,specific:0,ratio:0.000000},
+  "청주시 서원구": {total:1145,specific:0,ratio:0.000000},
+  "청주시 청원구": {total:1452,specific:98,ratio:0.067493},
+  "청주시 흥덕구": {total:2200,specific:0,ratio:0.000000},
+  "춘천시": {total:1893,specific:0,ratio:0.000000},
+  "충주시": {total:1370,specific:179,ratio:0.130657},
+  "칠곡군": {total:718,specific:102,ratio:0.142061},
+  "태백시": {total:203,specific:0,ratio:0.000000},
+  "태안군": {total:251,specific:0,ratio:0.000000},
+  "통영시": {total:716,specific:115,ratio:0.160615},
+  "파주시": {total:2960,specific:0,ratio:0.000000},
+  "평창군": {total:184,specific:0,ratio:0.000000},
+  "평택시": {total:4431,specific:0,ratio:0.000000},
+  "포천시": {total:680,specific:0,ratio:0.000000},
+  "포항시 남구": {total:1613,specific:191,ratio:0.118413},
+  "포항시 북구": {total:1755,specific:0,ratio:0.000000},
+  "하남시": {total:1697,specific:0,ratio:0.000000},
+  "하동군": {total:68,specific:0,ratio:0.000000},
+  "함안군": {total:230,specific:0,ratio:0.000000},
+  "함양군": {total:146,specific:0,ratio:0.000000},
+  "함평군": {total:50,specific:0,ratio:0.000000},
+  "합천군": {total:43,specific:0,ratio:0.000000},
+  "해남군": {total:206,specific:0,ratio:0.000000},
+  "해운대구": {total:2284,specific:0,ratio:0.000000},
+  "홍성군": {total:615,specific:87,ratio:0.141463},
+  "홍천군": {total:342,specific:0,ratio:0.000000},
+  "화성시": {total:5695,specific:0,ratio:0.000000},
+  "화순군": {total:295,specific:0,ratio:0.000000},
+  "화천군": {total:136,specific:0,ratio:0.000000},
+  "횡성군": {total:183,specific:0,ratio:0.000000}
+},
+];
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. 지역 목록 (전국 250개 시/군/구)
+// ═══════════════════════════════════════════════════════════════════════════
+const REGIONS = [
+  // 서울 25
+  '종로구','중구','용산구','성동구','광진구','동대문구','중랑구','성북구','강북구','도봉구',
+  '노원구','은평구','서대문구','마포구','양천구','강서구','구로구','금천구','영등포구','동작구',
+  '관악구','서초구','강남구','송파구','강동구',
+  // 부산 16
+  '중구','서구','동구','영도구','부산진구','동래구','남구','북구','해운대구','사하구',
+  '금정구','강서구','연제구','수영구','사상구','기장군',
+  // 대구 8
+  '중구','동구','서구','남구','북구','수성구','달서구','달성군',
+  // 인천 10
+  '중구','동구','미추홀구','연수구','남동구','부평구','계양구','서구','강화군','옹진군',
+  // 광주 5
+  '동구','서구','남구','북구','광산구',
+  // 대전 5
+  '동구','중구','서구','유성구','대덕구',
+  // 울산 5
+  '중구','남구','동구','북구','울주군',
+  // 세종
+  '세종시',
+  // 경기 42
+  '수원시 장안구','수원시 권선구','수원시 팔달구','수원시 영통구',
+  '성남시 수정구','성남시 중원구','성남시 분당구',
+  '의정부시','안양시 만안구','안양시 동안구','부천시','광명시','평택시','동두천시',
+  '안산시 상록구','안산시 단원구',
+  '고양시 덕양구','고양시 일산동구','고양시 일산서구',
+  '과천시','구리시','남양주시','오산시','시흥시','군포시','의왕시','하남시',
+  '용인시 처인구','용인시 기흥구','용인시 수지구',
+  '파주시','이천시','안성시','김포시','화성시','광주시','양주시','포천시','여주시',
+  '연천군','가평군','양평군',
+  // 강원 18
+  '춘천시','원주시','강릉시','동해시','태백시','속초시','삼척시',
+  '홍천군','횡성군','영월군','평창군','정선군','철원군','화천군','양구군','인제군','고성군','양양군',
+  // 충북 14
+  '청주시 상당구','청주시 서원구','청주시 흥덕구','청주시 청원구',
+  '충주시','제천시','보은군','옥천군','영동군','증평군','진천군','괴산군','음성군','단양군',
+  // 충남 16
+  '천안시 동남구','천안시 서북구','공주시','보령시','아산시','서산시','논산시','계룡시','당진시',
+  '금산군','부여군','서천군','청양군','홍성군','예산군','태안군',
+  // 전북 15
+  '전주시 완산구','전주시 덕진구','군산시','익산시','정읍시','남원시','김제시',
+  '완주군','진안군','무주군','장수군','임실군','순창군','고창군','부안군',
+  // 전남 22
+  '목포시','여수시','순천시','나주시','광양시',
+  '담양군','곡성군','구례군','고흥군','보성군','화순군','장흥군','강진군','해남군','영암군',
+  '무안군','함평군','영광군','장성군','완도군','진도군','신안군',
+  // 경북 24
+  '포항시 남구','포항시 북구','경주시','김천시','안동시','구미시','영주시','영천시','상주시','문경시','경산시',
+  '군위군','의성군','청송군','영양군','영덕군','청도군','고령군','성주군','칠곡군','예천군','봉화군','울진군','울릉군',
+  // 경남 22
+  '창원시 의창구','창원시 성산구','창원시 마산합포구','창원시 마산회원구','창원시 진해구',
+  '진주시','통영시','사천시','김해시','밀양시','거제시','양산시',
+  '의령군','함안군','창녕군','고성군','남해군','하동군','산청군','함양군','거창군','합천군',
+  // 제주 2
+  '제주시','서귀포시',
+];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. 더미 데이터 생성 (tab0: 주문 avg 25%, tab1: 파트너 avg 30%)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// XorShift32 seeded RNG
+function makeRng(seed) {
+  let s = (seed ^ 0xDEADBEEF) >>> 0 || 1;
+  return () => { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return (s >>> 0) / 4294967296; };
+}
+
+// Box-Muller → N(0,1)
+function gauss(rng) {
+  const u = Math.max(rng(), 1e-10);
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng());
+}
+
+function generateDummy(tabIdx, seed) {
+  const rng       = makeRng(seed);
+  const isPartner = tabIdx === 1;
+  const MEAN      = isPartner ? 0.30 : 0.25;
+  const STD       = 0.10;
+
+  const map = {};
+  for (const rgn of REGIONS) {
+    const rural   = rgn.endsWith('군');
+    const logMean = isPartner ? (rural ? 5.8 : 7.5) : (rural ? 11.3 : 13.2);
+    const logStd  = rural ? 0.50 : 0.55;
+    const total   = Math.max(
+      Math.round(Math.exp(logMean + gauss(rng) * logStd)),
+      isPartner ? 50 : 10000
+    );
+    const minR = rural ? 0.03 : 0.07;
+    const maxR = rural ? 0.50 : 0.65;
+    const rate = Math.min(Math.max(MEAN + gauss(rng) * STD, minR), maxR);
+    const specific = Math.round(total * rate);
+    map[rgn] = { total, specific, ratio: specific / total };
+  }
+  return map;
+}
+
+let _seed = Date.now();
+
+function refreshDummy() {
+  for (let i = 0; i < 2; i++) {
+    userDataMaps[i] = REAL_DATA[i];
+  }
+  updateMapColors();
+  renderStats();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. 탭 + 상태
+// ═══════════════════════════════════════════════════════════════════════════
+const TAB_CONFIG = [
+  { col1: '푸드 주문',  col2: 'Unique 주문'   },
+  { col1: '파트너 수',  col2: 'Unique 파트너' },
+];
+let activeTab = 0;
+let sortDir = 'desc';
+const userDataMaps = [{}, {}];
+
+function setTab(idx) {
+  activeTab = idx;
+  document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+  updateMapColors();
+  renderStats();
+}
+
+function setSort(dir) {
+  sortDir = dir;
+  document.getElementById('sort-desc').classList.toggle('active', dir === 'desc');
+  document.getElementById('sort-asc').classList.toggle('active', dir === 'asc');
+  renderStats();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. 색상 스케일
+// ═══════════════════════════════════════════════════════════════════════════
+let colorMode = 'sequential';
+
+const COLOR_SCHEMES = {
+  sequential: d3.scaleSequential(d3.interpolateYlOrRd).domain([0, 1]),
+  diverging:  d3.scaleDiverging(d3.interpolateBuGn).domain([0, 0.5, 1]),
+};
+
+function getColor(ratio) { return COLOR_SCHEMES[colorMode](ratio); }
+
+function setMode(mode) {
+  colorMode = mode;
+  document.getElementById('mode-sequential').classList.toggle('active', mode === 'sequential');
+  document.getElementById('mode-diverging').classList.toggle('active', mode === 'diverging');
+  drawLegend();
+  updateMapColors();
+}
+
+function drawLegend() {
+  const canvas = document.getElementById('legend-canvas');
+  const ctx = canvas.getContext('2d');
+  const w = canvas.offsetWidth || 260;
+  canvas.width = w;
+  for (let i = 0; i < w; i++) {
+    ctx.fillStyle = getColor(i / w);
+    ctx.fillRect(i, 0, 1, 14);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. 지도 초기화
+// ═══════════════════════════════════════════════════════════════════════════
+const svg = d3.select('#map');
+const g   = svg.append('g');
+
+const zoom = d3.zoom().scaleExtent([0.5, 12]).on('zoom', e => g.attr('transform', e.transform));
+svg.call(zoom);
+
+let projection, pathGen, geoData;
+
+function initMap(topoData) {
+  geoData = topoData;
+  const municipalities = topojson.feature(topoData, topoData.objects['skorea_municipalities_2018_geo']);
+
+  const svgEl = document.getElementById('map');
+  const W = svgEl.clientWidth, H = svgEl.clientHeight;
+
+  projection = d3.geoMercator().fitExtent([[24, 24], [W - 24, H - 24]], municipalities);
+  pathGen    = d3.geoPath().projection(projection);
+
+  g.selectAll('.region')
+    .data(municipalities.features)
+    .join('path')
+    .attr('class', 'region no-match')
+    .attr('d', pathGen)
+    .attr('data-name', d => d.properties.name || d.properties.NAME)
+    .on('mousemove', onMouseMove)
+    .on('mouseleave', onMouseLeave);
+
+  document.getElementById('loading').style.display = 'none';
+  refreshDummy(); // 더미 데이터 자동 적용
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. 지역명 매칭
+// ═══════════════════════════════════════════════════════════════════════════
+function normalize(s) {
+  return s.trim()
+    .replace(/특별시|광역시|특별자치시|특별자치도|특별자치군/g, '')
+    .replace(/\s+/g, '')
+    .toLowerCase();
+}
+
+function shortName(fullName) {
+  const parts = fullName.trim().split(/\s+/);
+  return parts[parts.length - 1];
+}
+
+function findMatch(geoName) {
+  const gNorm  = normalize(geoName);
+  const gShort = normalize(shortName(geoName));
+  const dm     = userDataMaps[activeTab];
+
+  for (const [k, v] of Object.entries(dm)) { if (normalize(k) === gNorm)  return v; }
+  for (const [k, v] of Object.entries(dm)) { if (normalize(k) === gShort) return v; }
+  for (const [k, v] of Object.entries(dm)) {
+    const kn = normalize(k);
+    if (gNorm.includes(kn) || kn.includes(gNorm)) return v;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. 지도 색상 업데이트
+// ═══════════════════════════════════════════════════════════════════════════
+function updateMapColors() {
+  if (!g) return;
+  let matched = 0, unmatched = 0;
+
+  g.selectAll('.region').each(function(d) {
+    const geoName = d.properties.name || d.properties.NAME || '';
+    const match = findMatch(geoName);
+    const el = d3.select(this);
+    if (match) {
+      el.classed('no-match', false).attr('fill', getColor(match.ratio));
+      matched++;
+    } else {
+      el.classed('no-match', true).attr('fill', null);
+      unmatched++;
+    }
+  });
+
+  if (Object.keys(userDataMaps[activeTab]).length > 0) {
+    const info = document.getElementById('match-info');
+    info.style.display = 'block';
+    info.innerHTML = `매칭 <span class="matched">${matched}</span> · 미매칭 <span class="unmatched">${unmatched}</span>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. 통계 목록
+// ═══════════════════════════════════════════════════════════════════════════
+function renderStats() {
+  const entries = Object.entries(userDataMaps[activeTab]).sort((a, b) =>
+    sortDir === 'desc' ? b[1].ratio - a[1].ratio : a[1].ratio - b[1].ratio
+  );
+  if (!entries.length) {
+    document.getElementById('stats-list').innerHTML = '<div class="no-data">데이터 없음</div>';
+    return;
+  }
+  document.getElementById('stats-list').innerHTML = entries.map(([name, d]) => {
+    const pct = (d.ratio * 100).toFixed(1);
+    return `
+      <div class="stat-row">
+        <div class="rgn">${name}</div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${getColor(d.ratio)}"></div></div>
+        <div class="ratio">${pct}%</div>
+      </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. 툴팁
+// ═══════════════════════════════════════════════════════════════════════════
+function onMouseMove(event, d) {
+  const geoName = d.properties.name || d.properties.NAME || '';
+  const match   = findMatch(geoName);
+  const tip     = document.getElementById('tooltip');
+
+  let inner = `<div class="tt-name">${geoName}</div>`;
+  if (match) {
+    const pct = (match.ratio * 100).toFixed(1);
+    inner += `
+      <div class="tt-ratio">${pct}%</div>
+      <div class="tt-row">${TAB_CONFIG[activeTab].col1} <span>${match.total.toLocaleString()}</span></div>
+      <div class="tt-row">${TAB_CONFIG[activeTab].col2} <span>${match.specific.toLocaleString()}</span></div>`;
+  } else {
+    inner += '<div class="tt-row" style="color:#aaa">데이터 없음</div>';
+  }
+  tip.innerHTML = inner;
+
+  const rect = document.querySelector('.map-area').getBoundingClientRect();
+  let x = event.clientX - rect.left + 14;
+  let y = event.clientY - rect.top  - 10;
+  if (x + 175 > rect.width)  x -= 190;
+  if (y + 110 > rect.height) y -= 110;
+  tip.style.left = x + 'px';
+  tip.style.top  = y + 'px';
+  tip.style.display = 'block';
+}
+function onMouseLeave() { document.getElementById('tooltip').style.display = 'none'; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. 줌
+// ═══════════════════════════════════════════════════════════════════════════
+function zoomIn()    { svg.transition().call(zoom.scaleBy, 1.5); }
+function zoomOut()   { svg.transition().call(zoom.scaleBy, 0.67); }
+function zoomReset() { svg.transition().call(zoom.transform, d3.zoomIdentity); }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 11. GeoJSON 로드 + 리사이즈
+// ═══════════════════════════════════════════════════════════════════════════
+const TOPO_URL = 'https://raw.githubusercontent.com/southkorea/southkorea-maps/master/kostat/2018/json/skorea-municipalities-2018-topo.json';
+
+d3.json(TOPO_URL)
+  .then(data => { initMap(data); drawLegend(); window.addEventListener('resize', drawLegend); })
+  .catch(err => {
+    document.getElementById('loading').innerHTML =
+      `<div style="color:#FF6B6B;text-align:center;padding:20px">
+        지도 로드 실패<br><small style="color:#aaa">네트워크 연결을 확인하세요<br>${err.message}</small>
+      </div>`;
+  });
+
+window.addEventListener('resize', () => {
+  if (!geoData) return;
+  const munis = topojson.feature(geoData, geoData.objects['skorea_municipalities_2018_geo']);
+  const el = document.getElementById('map');
+  projection.fitExtent([[24, 24], [el.clientWidth - 24, el.clientHeight - 24]], munis);
+  pathGen = d3.geoPath().projection(projection);
+  g.selectAll('.region').attr('d', pathGen);
+  drawLegend();
+});
+</script>
+</body>
+</html>
